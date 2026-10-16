@@ -1,0 +1,13 @@
+{"id":"259a2b3d","date":"2026-10-02","text":"Cleaned and explored the electricity demand dataset: [what data, how many rows, what issues you fixed]","tags":["python","time-series","pandas"],"source":"manual","link":null}
+{"id":"cfe3e639","date":"2026-10-09","text":"Built forecasting models: [which models you tried, e.g. baseline, XGBoost, LSTM, and the metric you used]","tags":["python","ml","time-series"],"source":"manual","link":null}
+{"id":"91a95e0c","date":"2026-10-14","text":"Finished load forecasting project: [best model, its actual error value, what you pushed to GitHub]","tags":["python","ml","github"],"source":"manual","link":null}
+{"id":"8ecef579","date":"2026-10-05","text":"Built the feature pipeline for phishing detection: [URL features, text features, what you used]","tags":["python","nlp","ml"],"source":"manual","link":null}
+{"id":"72c3068a","date":"2026-10-12","text":"Trained the hybrid phishing model: [model parts, how you evaluated, result]","tags":["python","ml","research"],"source":"manual","link":null}
+{"id":"b20c307d","date":"2026-10-15","text":"Built the Streamlit app and wrote the research paper for the phishing system: [what the app does, paper status]","tags":["python","streamlit","research"],"source":"manual","link":null}
+{"id":"0ac7cc0a","date":"2026-08-10","text":"Built churn and content-popularity prediction for the OTT project: [models, data, result]","tags":["python","ml","pandas"],"source":"manual","link":null}
+{"id":"cefa1276","date":"2026-08-22","text":"Built the Streamlit app for the OTT system: [what the app shows]","tags":["python","streamlit"],"source":"manual","link":null}
+{"id":"fae9f41d","date":"2026-08-20","text":"Did the Nike Instagram post analytics project: [what pipelines, what you analysed]","tags":["python","analytics","social-media"],"source":"manual","link":null}
+{"id":"a8155cf0","date":"2026-10-16","text":"Built the Hinglish sentiment classifier: [data, approach, result]","tags":["python","nlp","sentiment"],"source":"manual","link":null}
+{"id":"0bf7cdd8","date":"2026-10-10","text":"Worked on Cloud Cover Detective: [cloud and shadow detection method, usability score]","tags":["python","image-processing"],"source":"manual","link":null}
+{"id":"db87e0a0","date":"2026-09-28","text":"Rebuilt Google Advanced Data Analytics Certificate projects locally: [what you rebuilt]","tags":["python","sql","analytics"],"source":"manual","link":null}
+{"id":"dfbe5045","date":"2026-10-17","text":"Started the career-log resume builder: set up project, log schema, JSONL storage, tests and CLI","tags":["python","git","pydantic"],"source":"manual","link":null}
