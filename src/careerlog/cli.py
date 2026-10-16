@@ -1,6 +1,7 @@
 import argparse
 from datetime import date
 
+from .index import build_index, search
 from .schema import LogEntry
 from .store import add_entry, load_entries
 
@@ -19,6 +20,12 @@ def main():
 
     imp = sub.add_parser("import", help="Import entries from a text file")
     imp.add_argument("file", help="Path to file, one entry per line: date | tags | text")
+
+    sub.add_parser("index", help="Rebuild the search index from the log")
+
+    srch = sub.add_parser("search", help="Find entries by meaning")
+    srch.add_argument("query", help="What you are looking for")
+    srch.add_argument("-k", type=int, default=5, help="How many results")
 
     args = parser.parse_args()
 
@@ -52,6 +59,14 @@ def main():
                 ))
                 count += 1
         print(f"Imported {count} entries")
+
+    elif args.command == "index":
+        n = build_index(load_entries())
+        print(f"Indexed {n} entries")
+
+    elif args.command == "search":
+        for r in search(args.query, k=args.k):
+            print(f"[{r['id']}] {r['date']} (distance {r['distance']:.2f}): {r['text'][:90]}")
 
 
 if __name__ == "__main__":
