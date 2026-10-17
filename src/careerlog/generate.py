@@ -21,6 +21,8 @@ Rules:
 - If an entry states a caveat about a headline number (for example a small test set or a favourable split), keep a short version of that caveat in the bullet.
 - Each bullet starts with a strong past-tense verb, is a single line under 40 words, and has no first-person words.
 - Order bullets from most to least relevant to the request. Write at most 5 bullets.
+- Only write a bullet if the entries directly show the skill, tool, method or topic the request names. A related or adjacent project does not count: for example, a model comparison or an ablation is not A/B testing, and a Streamlit app is not a dashboard tool.
+- If the request names a specific skill or tool that no entry mentions, return {"bullets": []}.
 - If the entries do not support a good bullet for the request, return fewer bullets or none.
 
 Return only JSON in this shape:

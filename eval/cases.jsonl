@@ -1,0 +1,25 @@
+{"id": "c01", "request": "machine learning projects", "type": "covered", "expected_projects": ["load-forecasting", "phishing-detection", "hinglish-sentiment"]}
+{"id": "c02", "request": "time series forecasting", "type": "covered", "expected_projects": ["load-forecasting"]}
+{"id": "c03", "request": "phishing and cybersecurity detection", "type": "covered", "expected_projects": ["phishing-detection"]}
+{"id": "c04", "request": "NLP and sentiment analysis", "type": "covered", "expected_projects": ["hinglish-sentiment"]}
+{"id": "c05", "request": "Streamlit apps", "type": "covered", "expected_projects": ["phishing-detection", "ott-intelligence"]}
+{"id": "c06", "request": "data cleaning and preprocessing", "type": "covered", "expected_projects": ["load-forecasting", "phishing-detection"]}
+{"id": "c07", "request": "model evaluation and comparison", "type": "covered", "expected_projects": ["load-forecasting", "phishing-detection", "hinglish-sentiment"]}
+{"id": "c08", "request": "XGBoost and gradient boosting", "type": "covered", "expected_projects": ["phishing-detection", "load-forecasting"]}
+{"id": "c09", "request": "LSTM and deep learning", "type": "covered", "expected_projects": ["load-forecasting"]}
+{"id": "c10", "request": "social media analytics", "type": "covered", "expected_projects": ["nike-instagram-analytics", "hinglish-sentiment"]}
+{"id": "c11", "request": "image processing", "type": "covered", "expected_projects": ["cloud-cover-detective"]}
+{"id": "c12", "request": "research and writing papers", "type": "covered", "expected_projects": ["phishing-detection"]}
+{"id": "u01", "request": "cloud computing and DevOps", "type": "uncovered", "expected_projects": []}
+{"id": "u02", "request": "Kubernetes and Docker deployment", "type": "uncovered", "expected_projects": []}
+{"id": "u03", "request": "mobile app development", "type": "uncovered", "expected_projects": []}
+{"id": "u04", "request": "team leadership and people management", "type": "uncovered", "expected_projects": []}
+{"id": "u05", "request": "Java backend development", "type": "uncovered", "expected_projects": []}
+{"id": "u06", "request": "reinforcement learning", "type": "uncovered", "expected_projects": []}
+{"id": "c13", "request": "statistical analysis and hypothesis testing", "type": "covered", "expected_projects": ["load-forecasting"]}
+{"id": "c14", "request": "error analysis and model limitations", "type": "covered", "expected_projects": ["phishing-detection", "load-forecasting"]}
+{"id": "u07", "request": "SQL databases and query optimization", "type": "uncovered", "expected_projects": []}
+{"id": "u08", "request": "Power BI and Tableau dashboards", "type": "uncovered", "expected_projects": []}
+{"id": "u09", "request": "A/B testing and experimentation", "type": "uncovered", "expected_projects": []}
+{"id": "u10", "request": "big data processing with Spark and Hadoop", "type": "uncovered", "expected_projects": []}
+{"id": "u11", "request": "MLOps and deploying models to production", "type": "uncovered", "expected_projects": []}
