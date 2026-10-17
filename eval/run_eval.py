@@ -37,12 +37,12 @@ def has(text, term):
 
 def generate_with_retry(request):
     last = ""
-    for attempt in range(3):
+    for attempt in range(4):
         try:
             return generate_bullets(request, k=8), ""
         except Exception as exc:
             last = str(exc)[:120]
-            time.sleep(5 * (attempt + 1))
+            time.sleep(20 * (attempt + 1))
     return None, last
 
 
@@ -91,7 +91,7 @@ def main():
         else:
             print(case["id"], "covered  ", "bullets=" + str(len(rows)),
                   "ok=" + str(n_ok), "recall=" + "{:.2f}".format(recall))
-        time.sleep(1)
+        time.sleep(8)
 
     done = [r for r in results if "error" not in r]
     unc = [r for r in done if r["case"]["type"] == "uncovered"]
