@@ -1,2 +1,7 @@
-data/seed.txt
+.venv/
+.env
+__pycache__/
+.pytest_cache/
 chroma_db/
+data/*.txt
+data/*.jsonl

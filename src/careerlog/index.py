@@ -12,16 +12,17 @@ def get_collection(db_path: str = DB_PATH):
 
 
 def build_index(entries: list[LogEntry], db_path: str = DB_PATH) -> int:
-    """Embed every entry and store it. Safe to re-run: same id = overwrite."""
+    """Embed every entry (project name + text). Same id = overwrite."""
     if not entries:
         return 0
     col = get_collection(db_path)
     col.upsert(
         ids=[e.id for e in entries],
-        documents=[e.text for e in entries],
+        documents=[(e.project or "") + ": " + e.text for e in entries],
         metadatas=[
             {
                 "date": e.date.isoformat(),
+                "project": e.project or "",
                 "tags": ",".join(e.tags),
                 "source": e.source,
                 "link": e.link or "",
