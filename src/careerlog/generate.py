@@ -2,10 +2,9 @@ import json
 import os
 
 from dotenv import load_dotenv
-from groq import Groq
 
-from .index import search
 from .store import load_entries
+from .verify import check_bullet, tighten_citations
 
 load_dotenv()
 
@@ -15,8 +14,9 @@ Each log entry shows its id in [brackets] and its project in <angle brackets>.
 
 Rules:
 - Use ONLY facts stated in the log entries. Never add numbers, tools, metrics, or outcomes that are not in the entries.
-- Do not use words like deployed, production, scaled, launched, or improved unless an entry says so. Use the entry's own verbs when unsure (built, evaluated, compared).
-- Write exactly ONE bullet per project, and only for projects that fit the request. Combine the project's entries into that one bullet and cite every id you used.
+- Name the work the way the entry does. If an entry says case study, app, project or classifier, do not call it a pipeline, system, platform, framework or tool. Do not use words like deployed, production, scaled, launched, or improved unless an entry says so.
+- Write exactly ONE bullet per project, and only for projects that fit the request. Combine the project's entries into that one bullet.
+- Cite only the ids of entries whose facts appear in the bullet, at most three per bullet. Do not cite an entry you did not use.
 - Lead each bullet with the project's strongest concrete result and copy its numbers exactly as written.
 - If an entry states a caveat about a headline number (for example a small test set or a favourable split), keep a short version of that caveat in the bullet.
 - Each bullet starts with a strong past-tense verb, is a single line under 40 words, and has no first-person words.
@@ -29,8 +29,44 @@ Return only JSON in this shape:
 {"bullets": [{"text": "...", "source_ids": ["id1", "id2"]}]}"""
 
 
+def model_name():
+    return os.environ.get("GROQ_MODEL", "unknown")
+
+
+def _call_model(system, user):
+    """Ask the model for JSON. Retries once if the model returns invalid JSON."""
+    from groq import Groq
+
+    client = Groq()
+    for attempt in range(2):
+        try:
+            resp = client.chat.completions.create(
+                model=os.environ["GROQ_MODEL"],
+                temperature=0.2 + 0.3 * attempt,
+                max_tokens=2000,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+            return json.loads(resp.choices[0].message.content)
+        except Exception as exc:
+            bad_json = isinstance(exc, json.JSONDecodeError) or "json_validate_failed" in str(exc)
+            if not bad_json:
+                raise
+    return {"bullets": []}
+
+
 def generate_bullets(request: str, k: int = 8):
-    """Find matching projects, then write one cited bullet per project."""
+    """Find the matching projects, then write one cited, checked bullet per project.
+
+    Each bullet is a dict with text, source_ids, supported and issues. A non-empty
+    issues list means the bullet contains a number or risky word that its cited
+    entries do not contain.
+    """
+    from .index import search
+
     hits = search(request, k=k)
     hit_ids = {h["id"] for h in hits}
 
@@ -51,32 +87,19 @@ def generate_bullets(request: str, k: int = 8):
             "[" + e.id + "] <" + (e.project or "no-project") + "> ("
             + str(e.date) + ") " + e.text
         )
-    context = "\n".join(rows)
+    user = "Request: " + request + "\n\nLog entries:\n" + "\n".join(rows)
+    data = _call_model(SYSTEM_PROMPT, user)
 
-    client = Groq()
-    resp = client.chat.completions.create(
-        model=os.environ["GROQ_MODEL"],
-        temperature=0.2,
-        max_tokens=2000,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": "Request: " + request + "\n\nLog entries:\n" + context,
-            },
-        ],
-    )
-    data = json.loads(resp.choices[0].message.content)
-
-    valid_ids = {e.id for e in entries}
+    text_by_id = {e.id: e.text for e in entries}
     bullets = []
     for b in data.get("bullets", []):
-        ids = [i for i in b.get("source_ids", []) if i in valid_ids]
+        ids = [i for i in b.get("source_ids", []) if i in text_by_id]
+        ids = tighten_citations(b["text"], ids, text_by_id)
         bullets.append({
             "text": b["text"],
             "source_ids": ids,
             "supported": bool(ids),
+            "issues": check_bullet(b["text"], [text_by_id[i] for i in ids]),
         })
 
     used = [{"id": e.id, "text": e.text, "project": e.project} for e in entries]
