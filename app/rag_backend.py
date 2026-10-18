@@ -184,20 +184,27 @@ def _sample_answer(question: str) -> Answer:
 # Live backend (your real pipeline in src/careerlog)
 # --------------------------------------------------------------------------
 @lru_cache(maxsize=1)
-def _live_status() -> tuple[bool, int, str]:
-    """Returns (available, number of log entries, reason if unavailable)."""
+def _prepare() -> None:
+    """Load .env, make src/ importable, and run from the project root.
+
+    careerlog reads data/log.jsonl and chroma_db relative to the working directory.
+    """
     try:
         from dotenv import load_dotenv
 
         load_dotenv(ROOT / ".env")
     except ImportError:
         pass
-
     src = str(ROOT / "src")
     if src not in sys.path:
         sys.path.insert(0, src)
-    # careerlog reads data/log.jsonl and chroma_db relative to the working directory.
     os.chdir(ROOT)
+
+
+@lru_cache(maxsize=1)
+def _live_status() -> tuple[bool, int, str]:
+    """Returns (available, number of log entries, reason if unavailable)."""
+    _prepare()
 
     try:
         from careerlog.store import load_entries
@@ -243,3 +250,59 @@ def _live_answer(question: str, k: int = 8) -> Answer:
         intro="Here are bullets written only from your log. Each number points to the entries behind the bullet.",
         bullets=bullets, sources=sources, mode="live",
     )
+
+
+# --------------------------------------------------------------------------
+# Adding entries (used by the "Add an entry" form)
+# --------------------------------------------------------------------------
+def can_add_entries() -> tuple[bool, str]:
+    """Whether the form can write to the real log, and why not if it cannot."""
+    if os.environ.get("CAREERLOG_BACKEND", "auto").lower() == "sample":
+        return False, "Sample mode is on, so adding entries is switched off."
+    _prepare()
+    try:
+        import careerlog.store  # noqa: F401
+    except Exception as exc:
+        return False, "The careerlog package could not be loaded (" + str(exc)[:80] + ")."
+    return True, ""
+
+
+def existing_projects() -> list[str]:
+    """Project names in the log, most recently used first."""
+    if not can_add_entries()[0]:
+        return []
+    from careerlog.store import load_entries
+
+    latest: dict[str, str] = {}
+    for e in load_entries():
+        if e.project:
+            latest[e.project] = max(latest.get(e.project, ""), str(e.date))
+    return sorted(latest, key=lambda name: latest[name], reverse=True)
+
+
+def add_log_entry(project: str, day, text: str, tags_raw: str = "") -> str:
+    """Add one entry to the log and the search index.
+
+    Returns a short success message. Raises ValueError with a message for the user.
+    """
+    ok, reason = can_add_entries()
+    if not ok:
+        raise ValueError(reason)
+    from careerlog.entry import build_entry
+    from careerlog.store import add_entry, load_entries
+
+    entry = build_entry(project, day, text, tags_raw)
+    if any(e.project == entry.project and e.text == entry.text for e in load_entries()):
+        raise ValueError("That entry is already in your log.")
+    add_entry(entry)
+
+    note = ""
+    try:
+        from careerlog.index import build_index
+
+        build_index([entry])
+    except Exception as exc:
+        note = (" It was saved, but the search index was not updated (" + str(exc)[:60]
+                + "). Run: python -m careerlog index")
+    _live_status.cache_clear()  # so the header count and live mode refresh
+    return "Added to " + entry.project + "." + note

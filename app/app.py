@@ -8,10 +8,12 @@ rag_backend.py, which returns an Answer (bullets, plus the sources behind them).
 from __future__ import annotations
 
 import html
+from datetime import date
 
 import streamlit as st
 
-from rag_backend import Answer, backend_label, get_answer
+from rag_backend import (Answer, add_log_entry, backend_label, can_add_entries,
+                         existing_projects, get_answer)
 
 st.set_page_config(page_title="Career Log Assistant", page_icon="🗂️", layout="wide")
 
@@ -95,6 +97,13 @@ ul.bullets li::before { content: ""; position: absolute; left: .1rem; top: .66em
                      padding: .6rem .9rem; transition: border-color .15s, color .15s; }
 .stButton > button:hover { border-color: var(--brand); color: var(--brand); }
 .stButton > button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.stButton > button[data-testid="stBaseButton-primary"], .stButton > button[kind="primary"] {
+  background: var(--brand); border-color: var(--brand); color: #fff; justify-content: center; }
+.stButton > button[data-testid="stBaseButton-primary"] p, .stButton > button[kind="primary"] p { color: #fff; }
+.stButton > button[data-testid="stBaseButton-primary"]:hover, .stButton > button[kind="primary"]:hover {
+  background: #4338CA; border-color: #4338CA; color: #fff; }
+[data-testid="stExpander"] { border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.form-note { color: var(--muted); font-size: .85rem; line-height: 1.5; margin: -.2rem 0 .6rem; }
 
 /* Sources panel */
 .st-key-sources { position: sticky; top: 4rem; max-height: calc(100vh - 11rem); overflow-y: auto; padding-right: .2rem; }
@@ -245,6 +254,38 @@ def render_sources(entry: dict | None) -> None:
     st.markdown(cards, unsafe_allow_html=True)
 
 
+def add_entry_panel() -> None:
+    can, reason = can_add_entries()
+    with st.expander("Add an entry to your log"):
+        if not can:
+            st.caption(reason)
+            return
+        n = st.session_state.entry_nonce  # changing the nonce clears every field
+        NEW = "New project…"
+        projects = existing_projects()
+        choice = st.selectbox("Project", projects + [NEW], key="entry_project_%d" % n) if projects else NEW
+        name = choice
+        if choice == NEW:
+            name = st.text_input("New project name", key="entry_new_%d" % n, placeholder="e.g. Churn dashboard")
+        day = st.date_input("Date", value=date.today(), max_value=date.today(), key="entry_date_%d" % n)
+        text = st.text_area(
+            "What did you do?", key="entry_text_%d" % n, height=110,
+            placeholder="Built X with Y, and what it showed. Only plain facts.",
+        )
+        st.markdown('<div class="form-note">Add a number only if you can see it in your own results. '
+                    'Bullets can only be as accurate as the entries behind them.</div>', unsafe_allow_html=True)
+        tags = st.text_input("Tags (optional)", key="entry_tags_%d" % n, placeholder="python, nlp")
+        if st.button("Add to log", type="primary", key="entry_add_%d" % n):
+            try:
+                message = add_log_entry(name, day, text, tags)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state.entry_flash = message
+                st.session_state.entry_nonce += 1
+                st.rerun()
+
+
 # --------------------------------------------------------------------------
 # Page
 # --------------------------------------------------------------------------
@@ -252,6 +293,8 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "entry_nonce" not in st.session_state:
+    st.session_state.entry_nonce = 0
 
 label, is_live = backend_label()
 head_left, head_right = st.columns([5, 1])
@@ -267,6 +310,12 @@ with head_right:
     if st.session_state.messages and st.button("New chat", key="new_chat"):
         st.session_state.messages = []
         st.rerun()
+
+flash = st.session_state.pop("entry_flash", None)
+if flash:
+    st.toast(flash, icon="✅")
+
+add_entry_panel()
 
 # Called at the top level so Streamlit pins the input to the bottom of the page.
 question = st.chat_input("Ask about your projects, skills or results") or st.session_state.pop("pending", None)
