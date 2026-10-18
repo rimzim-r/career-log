@@ -239,8 +239,21 @@ def _prepare() -> None:
     os.chdir(ROOT)
 
 
-@lru_cache(maxsize=1)
+def _log_stamp() -> tuple[int, int]:
+    """Changes whenever data/log.jsonl changes, so cached status never goes stale."""
+    try:
+        st = (ROOT / "data" / "log.jsonl").stat()
+        return st.st_mtime_ns, st.st_size
+    except OSError:
+        return 0, 0
+
+
 def _live_status() -> tuple[bool, int, str]:
+    return _live_status_for(_log_stamp())
+
+
+@lru_cache(maxsize=4)
+def _live_status_for(_stamp: tuple) -> tuple[bool, int, str]:
     """Returns (available, number of log entries, reason if unavailable)."""
     _prepare()
 
@@ -282,7 +295,22 @@ def _cosine(distance: float) -> float:
     return max(0.0, min(1.0, 1 - distance / 2))
 
 
+def _sync_index() -> None:
+    """Index entries that were added to the log outside the app, for example by n8n."""
+    try:
+        from careerlog.index import build_index, get_collection
+        from careerlog.store import load_entries
+
+        indexed = set(get_collection().get(include=[])["ids"])
+        missing = [e for e in load_entries() if e.id not in indexed]
+        if missing:
+            build_index(missing)
+    except Exception:
+        pass  # a missing index is reported by the search itself
+
+
 def _live_answer(question: str, k: int = 8) -> Answer:
+    _sync_index()
     from careerlog.generate import generate_bullets
     from careerlog.index import search
     from careerlog.store import load_entries
@@ -297,6 +325,7 @@ def _live_answer(question: str, k: int = 8) -> Answer:
 
 
 def _live_job_answer(jd_text: str) -> Answer:
+    _sync_index()
     from careerlog.generate import generate_for_job
     from careerlog.store import load_entries
 
@@ -364,5 +393,4 @@ def add_log_entry(project: str, day, text: str, tags_raw: str = "") -> str:
     except Exception as exc:
         note = (" It was saved, but the search index was not updated (" + str(exc)[:60]
                 + "). Run: python -m careerlog index")
-    _live_status.cache_clear()  # so the header count and live mode refresh
     return "Added to " + entry.project + "." + note
