@@ -1,0 +1,213 @@
+{
+  "name": "Check-in replies to log",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "botToken",
+              "name": "botToken",
+              "value": "REPLACE_WITH_TELEGRAM_BOT_TOKEN",
+              "type": "string"
+            },
+            {
+              "id": "chatId",
+              "name": "chatId",
+              "value": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+              "type": "string"
+            },
+            {
+              "id": "checkinToken",
+              "name": "checkinToken",
+              "value": "REPLACE_WITH_CHECKIN_TOKEN",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $json.botToken }}/getUpdates",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "={{ $getWorkflowStaticData('global').lastUpdateId ? $getWorkflowStaticData('global').lastUpdateId + 1 : 0 }}"
+            },
+            {
+              "name": "timeout",
+              "value": "0"
+            },
+            {
+              "name": "allowed_updates",
+              "value": "[\"message\"]"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "get-replies",
+      "name": "Get new replies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Add to log + prepare reply text\n// Matches src/careerlog/api.py exactly\n\nconst config = $('Config').first().json;\nconst expectedChatId = String(config.chatId);\nconst checkinToken = config.checkinToken;\nconst checkinUrl = 'http://127.0.0.1:8765/entries';\n\nconst updates = $input.first().json.result || [];\nconst staticData = $getWorkflowStaticData('global');\nlet maxUpdateId = staticData.lastUpdateId || 0;\n\nconst replies = [];\n\nfor (const update of updates) {\n  if (update.update_id > maxUpdateId) {\n    maxUpdateId = update.update_id;\n  }\n\n  const message = update.message;\n  if (!message || !message.text) continue;\n\n  const chatId = String(message.chat?.id);\n  if (chatId !== expectedChatId) continue;\n\n  const text = message.text.trim();\n  if (!text) continue;\n\n  let replyText = 'Not added: the check-in service did not answer';\n  try {\n    const response = await this.helpers.httpRequest({\n      method: 'POST',\n      url: checkinUrl,\n      headers: {\n        'X-Token': checkinToken,\n        'Content-Type': 'application/json'\n      },\n      body: { message: text },\n      json: true,\n      timeout: 10000\n    });\n\n    if (response && response.id) {\n      replyText = 'Added to career-log.';\n    } else if (response && response.duplicate) {\n      replyText = 'Already in your log.';\n    } else if (response && response.error) {\n      replyText = `Not added: ${response.error}`;\n    } else {\n      replyText = 'Not added: unexpected response from check-in service';\n    }\n  } catch (error) {\n    const msg = error.message || '';\n    if (msg.includes('token') || msg.includes('401')) {\n      replyText = 'Not added: bad or missing token';\n    } else {\n      replyText = `Not added: ${msg || 'service error'}`;\n    }\n  }\n\n  replies.push({\n    json: {\n      chatId,\n      text: replyText,\n      originalText: text\n    }\n  });\n}\n\nif (maxUpdateId > (staticData.lastUpdateId || 0)) {\n  staticData.lastUpdateId = maxUpdateId;\n}\n\nreturn replies.length\n  ? replies\n  : [{ json: { chatId: expectedChatId, text: null, skip: true } }];\n"
+      },
+      "id": "add-to-log",
+      "name": "Add to log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Make reply – just pass through the prepared reply (filter out skips)\nconst items = $input.all();\nreturn items.filter(item => !item.json.skip && item.json.text);\n"
+      },
+      "id": "make-reply",
+      "name": "Make reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {}
+      },
+      "id": "send-reply",
+      "name": "Send reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get new replies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get new replies": {
+      "main": [
+        [
+          {
+            "node": "Add to log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to log": {
+      "main": [
+        [
+          {
+            "node": "Make reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make reply": {
+      "main": [
+        [
+          {
+            "node": "Send reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "checkin-replies",
+  "tags": []
+}

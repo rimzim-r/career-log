@@ -57,3 +57,15 @@ The UI only needs `get_answer(question) -> Answer` from `rag_backend.py`:
 - `score` is a number from 0 to 1, or `None` when you have no score.
 
 Replace the body of `_live_answer` with your own retrieval and generation and the interface needs no changes.
+## Weekly check-in via Telegram + n8n
+
+You can append weekly updates by messaging your Telegram bot. n8n polls for new messages every 10 minutes and posts them to the local check-in API.
+
+### Prerequisites
+
+- A Telegram bot token and your chat ID.
+- `.env` contains `CHECKIN_TOKEN` (any long random string) plus `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
+- n8n running and the check-in service running:
+
+```bash
+python -m careerlog.api
