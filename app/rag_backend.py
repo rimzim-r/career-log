@@ -49,6 +49,7 @@ class Answer:
     bullets: list[Bullet]
     sources: list[Source]  # in citation order: source 1 is the first one cited
     mode: str  # "sample" or "live"
+    requirements: list[str] = field(default_factory=list)  # job mode: what was searched for
 
 
 NO_MATCH = ("Your log has nothing that directly matches this, so no bullets were written. "
@@ -69,6 +70,19 @@ def get_answer(question: str) -> Answer:
     if mode == "live":
         raise RuntimeError("Live backend unavailable: " + reason)
     return _sample_answer(question)
+
+
+def get_job_answer(jd_text: str) -> Answer:
+    """Tailor bullets to a pasted job description. Raises ValueError for unusable text."""
+    mode = os.environ.get("CAREERLOG_BACKEND", "auto").lower()
+    if mode == "sample":
+        return _sample_job_answer(jd_text)
+    ok, _count, reason = _live_status()
+    if ok:
+        return _live_job_answer(jd_text)
+    if mode == "live":
+        raise RuntimeError("Live backend unavailable: " + reason)
+    return _sample_job_answer(jd_text)
 
 
 def backend_label() -> tuple[str, bool]:
@@ -180,6 +194,30 @@ def _sample_answer(question: str) -> Answer:
     )
 
 
+_SAMPLE_SKILLS = [
+    "machine learning", "time series", "forecasting", "nlp", "text classification", "sql",
+    "dashboard", "streamlit", "reporting", "automation", "lightgbm", "distilbert",
+]
+
+
+def _sample_job_answer(jd_text: str) -> Answer:
+    text = re.sub(r"\s+", " ", jd_text or "").strip()
+    if len(text) < 80:
+        raise ValueError("Paste more of the job description. The responsibilities and requirements "
+                         "sections work best.")
+    lowered = text.lower()
+    requirements = [skill for skill in _SAMPLE_SKILLS if skill in lowered][:6]
+    if not requirements:
+        raise ValueError("Could not find specific skills or tools in that text. "
+                         "Paste the responsibilities and requirements sections.")
+    answer = _sample_answer(" ".join(requirements))
+    answer.requirements = requirements
+    if answer.bullets:
+        answer.intro = ("Here are bullets tailored to this job description. "
+                        "Each number points to the entries behind the bullet.")
+    return answer
+
+
 # --------------------------------------------------------------------------
 # Live backend (your real pipeline in src/careerlog)
 # --------------------------------------------------------------------------
@@ -219,16 +257,7 @@ def _live_status() -> tuple[bool, int, str]:
     return True, count, ""
 
 
-def _live_answer(question: str, k: int = 8) -> Answer:
-    from careerlog.generate import generate_bullets
-    from careerlog.index import search
-    from careerlog.store import load_entries
-
-    entries = {e.id: e for e in load_entries()}
-    # Chroma returns squared L2 distance on normalised vectors, so cosine = 1 - d / 2.
-    scores = {h["id"]: max(0.0, min(1.0, 1 - h["distance"] / 2)) for h in search(question, k=k)}
-    raw, _used = generate_bullets(question, k=k)
-
+def _answer_from(raw: list[dict], entries: dict, scores: dict, intro: str) -> Answer:
     bullets: list[Bullet] = []
     sources: list[Source] = []
     seen: set[str] = set()
@@ -243,13 +272,44 @@ def _live_answer(question: str, k: int = 8) -> Answer:
                 e = entries[sid]
                 sources.append(Source(sid, e.project or "other", str(e.date), e.text,
                                       scores.get(sid), "Included from a matching project"))
-
     if not bullets:
         return Answer(intro=NO_MATCH, bullets=[], sources=[], mode="live")
-    return Answer(
-        intro="Here are bullets written only from your log. Each number points to the entries behind the bullet.",
-        bullets=bullets, sources=sources, mode="live",
+    return Answer(intro=intro, bullets=bullets, sources=sources, mode="live")
+
+
+def _cosine(distance: float) -> float:
+    # Chroma returns squared L2 distance on normalised vectors, so cosine = 1 - d / 2.
+    return max(0.0, min(1.0, 1 - distance / 2))
+
+
+def _live_answer(question: str, k: int = 8) -> Answer:
+    from careerlog.generate import generate_bullets
+    from careerlog.index import search
+    from careerlog.store import load_entries
+
+    entries = {e.id: e for e in load_entries()}
+    scores = {h["id"]: _cosine(h["distance"]) for h in search(question, k=k)}
+    raw, _used = generate_bullets(question, k=k)
+    return _answer_from(
+        raw, entries, scores,
+        "Here are bullets written only from your log. Each number points to the entries behind the bullet.",
     )
+
+
+def _live_job_answer(jd_text: str) -> Answer:
+    from careerlog.generate import generate_for_job
+    from careerlog.store import load_entries
+
+    entries = {e.id: e for e in load_entries()}
+    out = generate_for_job(jd_text)
+    scores = {i: _cosine(d) for i, d in out["distance"].items()}
+    answer = _answer_from(
+        out["bullets"], entries, scores,
+        "Here are bullets tailored to this job description, written only from your log. "
+        "Each number points to the entries behind the bullet.",
+    )
+    answer.requirements = out["requirements"]
+    return answer
 
 
 # --------------------------------------------------------------------------

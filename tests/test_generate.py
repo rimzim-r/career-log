@@ -50,3 +50,39 @@ def test_unknown_ids_are_dropped_and_extra_citations_are_trimmed(monkeypatch):
     ]})
     bullets, _ = generate.generate_bullets("forecasting")
     assert bullets[0]["source_ids"] == ["e2"]
+
+
+def test_job_mode_keeps_only_requirements_found_in_the_jd_and_checks_bullets(monkeypatch):
+    entries = _entries()
+    searched = []
+
+    def fake_search(query, k=8):
+        searched.append(query)
+        return [{"id": e.id, "project": e.project, "text": e.text, "distance": 1.0 + i * 0.2}
+                for i, e in enumerate(entries)]
+
+    def fake_model(system, user):
+        if system == generate.EXTRACT_PROMPT:
+            return {"requirements": ["LightGBM", "Kubernetes", "satellite images"]}
+        return {"bullets": [{"text": "Built an ensemble of LightGBM and LSTM reaching MAPE 4.40% on the test period.",
+                             "source_ids": ["e2"]}]}
+
+    monkeypatch.setitem(sys.modules, "careerlog.index", types.SimpleNamespace(search=fake_search))
+    monkeypatch.setattr(generate, "load_entries", lambda: entries)
+    monkeypatch.setattr(generate, "_call_model", fake_model)
+
+    jd = ("We need someone who has used LightGBM for forecasting and can detect clouds in satellite images. "
+          "You will present results to the product team every week.")
+    out = generate.generate_for_job(jd)
+    assert out["requirements"] == ["LightGBM", "satellite images"]  # Kubernetes is not in the job description
+    assert searched == ["LightGBM", "satellite images"]
+    assert out["bullets"][0]["issues"] == []
+    assert set(out["distance"]) == {"e1", "e2"}
+
+
+def test_job_mode_with_no_usable_requirements_raises(monkeypatch):
+    monkeypatch.setattr(generate, "_call_model", lambda system, user: {"requirements": ["Kubernetes"]})
+    jd = "We want a friendly teammate who enjoys working with others and learning new things every single day."
+    import pytest
+    with pytest.raises(ValueError, match="specific skills"):
+        generate.generate_for_job(jd)

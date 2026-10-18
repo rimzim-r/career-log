@@ -27,6 +27,14 @@ The chip then reads **Your log: N entries**. To force a mode, set `CAREERLOG_BAC
 
 Source cards show a relative label (Strong, Good or Partial match) compared with the best entry in that answer. Hover the label to see the raw cosine similarity, which is usually 0.2 to 0.6 for short entries.
 
+## Add an entry
+
+Open **Add an entry to your log** under the title. Pick a project (or type a new name), set the date, write what you did in plain words, and add optional tags. The entry is saved to `data/log.jsonl` and added to the search index, so the next question can find it. Entries under 25 characters, with `[bracketed]` placeholders, with a future date, or duplicates are rejected with a message. The form is off in sample mode.
+
+## Tailor bullets to a job description
+
+Open **Tailor bullets to a job description** and paste the responsibilities and requirements. The model reduces the text to up to six skills or tools, and any term that is not in the pasted text is dropped. The log is searched for each one, and bullets are written only from the matching entries, with the same citations and checks as normal questions. A skill you have not logged will not appear, so a thin match is a signal to add an entry. The text is sent to the language model, so paste only what you are comfortable sharing.
+
 ## Checks on every bullet
 
 Each generated bullet is checked against the entries it cites. If it contains a number, or a risky word such as pipeline, deployed or SQL, that the cited entries do not contain, the bullet is marked "Check before using this bullet" and a summary line appears above the list. Each bullet cites at most three entries, chosen by how much they share with the bullet. These checks catch invented numbers and a fixed list of words. They do not catch every vague overclaim, so read the sources.

@@ -13,7 +13,7 @@ from datetime import date
 import streamlit as st
 
 from rag_backend import (Answer, add_log_entry, backend_label, can_add_entries,
-                         existing_projects, get_answer)
+                         existing_projects, get_answer, get_job_answer)
 
 st.set_page_config(page_title="Career Log Assistant", page_icon="🗂️", layout="wide")
 
@@ -103,6 +103,9 @@ ul.bullets li::before { content: ""; position: absolute; left: .1rem; top: .66em
 .stButton > button[data-testid="stBaseButton-primary"]:hover, .stButton > button[kind="primary"]:hover {
   background: #4338CA; border-color: #4338CA; color: #fff; }
 [data-testid="stExpander"] { border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.looked { margin: .5rem 0 .3rem; color: var(--muted); font-size: .88rem; line-height: 2; }
+.req { display: inline-block; margin-left: .35rem; padding: .05rem .6rem; border-radius: 999px;
+       background: var(--bg); border: 1px solid var(--line); color: var(--body); font-size: .82rem; }
 .form-note { color: var(--muted); font-size: .85rem; line-height: 1.5; margin: -.2rem 0 .6rem; }
 
 /* Sources panel */
@@ -202,6 +205,9 @@ def source_card_html(n: int, s, best: float) -> str:
 # --------------------------------------------------------------------------
 def render_answer(answer: Answer) -> None:
     st.markdown(answer.intro)
+    if answer.requirements:
+        chips = "".join('<span class="req">%s</span>' % esc(r) for r in answer.requirements)
+        st.markdown('<div class="looked">Looked for in your log:%s</div>' % chips, unsafe_allow_html=True)
     if not answer.bullets:
         return
     flagged = sum(1 for b in answer.bullets if b.issues)
@@ -286,6 +292,26 @@ def add_entry_panel() -> None:
                 st.rerun()
 
 
+def job_panel() -> None:
+    with st.expander("Tailor bullets to a job description"):
+        n = st.session_state.jd_nonce  # changing the nonce clears the box
+        text = st.text_area(
+            "Job description", key="jd_text_%d" % n, height=180,
+            placeholder="Paste the responsibilities and requirements sections here.",
+        )
+        st.markdown('<div class="form-note">The text is reduced to the skills and tools it asks for, '
+                    'and your log is searched for each one. Bullets are written only from your entries, '
+                    'so a skill you have not logged will not appear.</div>', unsafe_allow_html=True)
+        if st.button("Tailor bullets", type="primary", key="jd_go_%d" % n):
+            if len(text.strip()) < 80:
+                st.error("Paste more of the job description. The responsibilities and requirements "
+                         "sections work best.")
+            else:
+                st.session_state.pending_jd = text
+                st.session_state.jd_nonce += 1
+                st.rerun()
+
+
 # --------------------------------------------------------------------------
 # Page
 # --------------------------------------------------------------------------
@@ -295,6 +321,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "entry_nonce" not in st.session_state:
     st.session_state.entry_nonce = 0
+if "jd_nonce" not in st.session_state:
+    st.session_state.jd_nonce = 0
 
 label, is_live = backend_label()
 head_left, head_right = st.columns([5, 1])
@@ -316,9 +344,11 @@ if flash:
     st.toast(flash, icon="✅")
 
 add_entry_panel()
+job_panel()
 
 # Called at the top level so Streamlit pins the input to the bottom of the page.
 question = st.chat_input("Ask about your projects, skills or results") or st.session_state.pop("pending", None)
+job = st.session_state.pop("pending_jd", None)
 
 st.write("")
 left, right = st.columns([1.75, 1], gap="large")
@@ -327,7 +357,7 @@ with left:
     for entry in st.session_state.messages:
         render_message(entry)
 
-    if not st.session_state.messages and not question:
+    if not st.session_state.messages and not question and not job:
         st.markdown(
             '<div class="welcome"><div class="welcome-title">Ask your career log</div>'
             '<p>Describe a role, skill or topic. You get resume bullets built only from your own '
@@ -339,15 +369,23 @@ with left:
                 st.session_state.pending = text
                 st.rerun()
 
-    if question:
-        user_entry = {"role": "user", "text": question}
+    if question or job:
+        if job:
+            snippet = " ".join(job.split())[:160]
+            shown = "Tailor bullets to this job description: \u201c" + snippet + "\u2026\u201d"
+        else:
+            shown = question
+        user_entry = {"role": "user", "text": shown}
         st.session_state.messages.append(user_entry)
         render_message(user_entry)
 
         with st.chat_message("assistant", avatar=":material/auto_stories:"):
             with st.spinner("Searching your log and writing bullets…"):
                 try:
-                    reply = {"role": "assistant", "answer": get_answer(question)}
+                    answer = get_job_answer(job) if job else get_answer(question)
+                    reply = {"role": "assistant", "answer": answer}
+                except ValueError as exc:  # bad input, the message is written for the user
+                    reply = {"role": "assistant", "answer": None, "error": str(exc)}
                 except Exception as exc:
                     reply = {
                         "role": "assistant",
