@@ -1,5 +1,7 @@
 # Career Log Assistant
 
+![Career Log Assistant](docs/screenshot.png)
+
 Turn a personal career log into resume bullets you can trust. You keep short, factual log entries. Ask a question or paste a job description, and the app writes bullets using only those entries. Every bullet carries numbered citations to the entries behind it, and any bullet with a number or risky word that its sources do not contain is flagged.
 
 A weekly Telegram check-in (via n8n) makes the log easy to keep up.
