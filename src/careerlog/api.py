@@ -40,6 +40,17 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_POST(self) -> None:
+        # Read the body before replying, even when the request is about to be refused.
+        # Replying with unread data makes Windows reset the connection, and the client
+        # then sees a dropped connection instead of our answer.
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return self._send(400, {"error": "bad length"})
+        if length > MAX_BODY:
+            return self._send(413, {"error": "message too large"})
+        raw = self.rfile.read(length) if length > 0 else b""
+
         if self.path != "/entries":
             return self._send(404, {"error": "not found"})
 
@@ -49,17 +60,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(401, {"error": "bad or missing token"})
 
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            return self._send(400, {"error": "bad length"})
-        if length > MAX_BODY:
-            return self._send(413, {"error": "message too large"})
-        try:
-            body = json.loads(self.rfile.read(length) or b"{}")
+            body = json.loads(raw or b"{}")
             message = str(body.get("message", ""))
         except (json.JSONDecodeError, AttributeError):
             return self._send(400, {"error": "send JSON like {\"message\": \"...\"}"})
-
         project, text = parse_message(message)
         try:
             entry = build_entry(project, date.today(), text, "weekly-checkin")

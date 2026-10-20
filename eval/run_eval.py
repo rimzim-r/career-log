@@ -7,6 +7,7 @@ sys.path.insert(0, "src")
 sys.stdout.reconfigure(encoding="utf-8")
 
 from careerlog.generate import generate_bullets
+from careerlog.verify import risky_words
 
 # Words a bullet should only use if its cited entries use them too.
 WATCH_TERMS = [
@@ -39,7 +40,7 @@ def generate_with_retry(request):
     last = ""
     for attempt in range(4):
         try:
-            return generate_bullets(request, k=8), ""
+         return generate_bullets(request, k=8), ""
         except Exception as exc:
             last = str(exc)[:120]
             time.sleep(20 * (attempt + 1))
@@ -71,7 +72,7 @@ def main():
             source = norm(" ".join(e["text"] for e in cited))
             text = norm(b["text"])
             bad_nums = sorted(numbers(text) - numbers(source))
-            bad_terms = [t for t in WATCH_TERMS if has(text, t) and not has(source, t)]
+            bad_terms = risky_words(text, source)
             ok = bool(cited) and not bad_nums and not bad_terms
             rows.append({"text": b["text"], "ok": ok, "no_citation": not cited,
                          "bad_numbers": bad_nums, "bad_terms": bad_terms})

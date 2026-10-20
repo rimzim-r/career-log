@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from .jd import clean_jd, ground_requirements
 from .store import load_entries
-from .verify import check_bullet, tighten_citations
+from .verify import add_number_sources, check_bullet, tighten_citations
 
 load_dotenv()
 
@@ -53,8 +53,8 @@ def _call_model(system, user):
         try:
             resp = client.chat.completions.create(
                 model=os.environ["GROQ_MODEL"],
-                temperature=0.2 + 0.3 * attempt,
-                max_tokens=2000,
+                temperature=0.3 * attempt,
+                max_tokens=6000,
                 response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": system},
@@ -67,6 +67,7 @@ def _call_model(system, user):
             if not bad_json:
                 raise
     return {}
+    raise RuntimeError("The model returned invalid JSON twice. Try again, or ask a narrower question.")
 
 
 def _select_entries(hits):
@@ -96,10 +97,12 @@ def _write_bullets(request, entries):
     data = _call_model(SYSTEM_PROMPT, user)
 
     text_by_id = {e.id: e.text for e in entries}
+    project_by_id = {e.id: e.project for e in entries}
     bullets = []
     for b in data.get("bullets", []):
         ids = [i for i in b.get("source_ids", []) if i in text_by_id]
         ids = tighten_citations(b["text"], ids, text_by_id)
+        ids = add_number_sources(b["text"], ids, project_by_id, text_by_id)
         bullets.append({
             "text": b["text"],
             "source_ids": ids,

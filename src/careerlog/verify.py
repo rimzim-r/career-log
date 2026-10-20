@@ -3,19 +3,22 @@ from __future__ import annotations
 
 import re
 
-# Words a bullet should only use if its cited entries use them too.
+# Words matched exactly. A bullet may only use one if its cited entries use it too.
 WATCH_TERMS = [
-    "deployed", "deploy", "deployment", "production", "pipeline", "scaled",
-    "scalable", "launched", "improved", "optimized", "automated", "end-to-end",
-    "real-time", "led", "managed", "mentored", "kubernetes", "docker", "aws",
-    "azure", "gcp", "spark", "hadoop", "tensorflow", "pytorch", "keras",
-    "scikit-learn", "sklearn", "flask", "fastapi", "django", "tableau",
-    "power bi", "sql", "mlops", "ci/cd", "api", "react", "java",
-    "platform", "framework", "system", "robust", "state-of-the-art",
+    "production", "led", "real-time", "end-to-end", "state-of-the-art",
+    "kubernetes", "docker", "aws", "azure", "gcp", "spark", "hadoop", "tensorflow", "pytorch",
+    "keras", "scikit-learn", "sklearn", "flask", "fastapi", "django", "tableau", "power bi",
+    "sql", "mlops", "ci/cd", "api", "react", "java",
+]
+# Roots matched as word beginnings, so "deploy" also covers deployed, deploying and deployment.
+WATCH_ROOTS = [
+    "deploy", "launch", "scal", "optimi", "automat", "improv", "mentor", "manag",
+    "pipeline", "platform", "framework", "system", "robust",
 ]
 
 NUM = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?")
 _WORD = re.compile(r"[a-z][a-z\-]{4,}")
+MAX_CITATIONS = 3
 
 
 def norm(text: str) -> str:
@@ -33,6 +36,25 @@ def has(text: str, term: str) -> bool:
     return re.search(pattern, text) is not None
 
 
+def _find_root(text: str, root: str):
+    match = re.search(r"(?<![\w-])" + re.escape(root) + r"[\w-]*", text)
+    return match.group(0) if match else None
+
+
+def risky_words(bullet_text: str, source_text: str) -> list[str]:
+    """Risky words that the bullet uses and the source does not."""
+    text, source = norm(bullet_text), norm(source_text)
+    found = []
+    for term in WATCH_TERMS:
+        if has(text, term) and not has(source, term):
+            found.append(term)
+    for root in WATCH_ROOTS:
+        word = _find_root(text, root)
+        if word and _find_root(source, root) is None:
+            found.append(word)
+    return found
+
+
 def check_bullet(bullet_text: str, source_texts: list[str]) -> list[str]:
     """Return short, readable problems. An empty list means none were found.
 
@@ -47,17 +69,13 @@ def check_bullet(bullet_text: str, source_texts: list[str]) -> list[str]:
     missing = sorted(numbers(text) - numbers(source))
     if missing:
         issues.append("the number " + ", ".join(missing) + " is not in the cited entries")
-    for term in WATCH_TERMS:
-        if has(text, term) and not has(source, term):
-            issues.append('the word "' + term + '" is not in the cited entries')
+    for word in risky_words(bullet_text, " ".join(source_texts)):
+        issues.append('the word "' + word + '" is not in the cited entries')
     return issues
 
 
 def _content_words(text: str) -> set[str]:
     return set(_WORD.findall(norm(text)))
-
-
-MAX_CITATIONS = 3
 
 
 def tighten_citations(bullet_text: str, ids: list[str], text_by_id: dict[str, str]) -> list[str]:
@@ -80,3 +98,37 @@ def tighten_citations(bullet_text: str, ids: list[str], text_by_id: dict[str, st
         return list(ids)[:MAX_CITATIONS]
     scored.sort(key=lambda pair: -pair[0])  # stable: ties keep their original order
     return [i for _score, i in scored[:MAX_CITATIONS]]
+
+
+def add_number_sources(bullet_text: str, ids: list[str], project_by_id: dict, text_by_id: dict) -> list[str]:
+    """Cite the entry that holds a number the bullet uses, when it is in the same project.
+
+    A number borrowed from a different project is never added, so it stays flagged.
+    At the citation cap, the weakest citation is swapped out, unless it supports a
+    number the bullet uses. The result never exceeds MAX_CITATIONS.
+    """
+    cited = list(ids)
+    projects = {project_by_id.get(i) for i in cited} - {None}
+    if not projects:
+        return cited
+    bullet_nums = numbers(norm(bullet_text))
+    known = numbers(norm(" ".join(text_by_id.get(i, "") for i in cited)))
+    for number in sorted(bullet_nums - known):
+        if number in known:
+            continue
+        source_id = next(
+            (other for other, text in text_by_id.items()
+             if other not in cited and project_by_id.get(other) in projects
+             and number in numbers(norm(text))),
+            None,
+        )
+        if source_id is None:
+            continue
+        if len(cited) >= MAX_CITATIONS:
+            weakest = cited[-1]
+            if numbers(norm(text_by_id.get(weakest, ""))) & bullet_nums:
+                continue  # the weakest entry still supports a number the bullet uses
+            cited.pop()
+        cited.append(source_id)
+        known = numbers(norm(" ".join(text_by_id.get(i, "") for i in cited)))
+    return cited

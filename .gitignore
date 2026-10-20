@@ -7,3 +7,4 @@ data/*.txt
 data/*.jsonl
 *.pyc
 eval/results.json
+.vscode/
